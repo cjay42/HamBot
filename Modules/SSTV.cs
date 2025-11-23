@@ -31,6 +31,17 @@ namespace HamBot.Modules
 
 		private IMqttClient? _mqttClient;
 
+		private string[] ignoredModes = 
+		[
+			"PD 50",
+			"PD 290",
+			"PD 120",
+			"PD 180",
+			"PD 240",
+			"PD 160",
+			"PD 90",
+		];
+
 		public SSTV(DiscordSocketClient discordClient, IConfiguration configuration)
 		{
 			_configuration = configuration;
@@ -44,31 +55,46 @@ namespace HamBot.Modules
 		private async Task RecievedImage(string jsonPayload)
 		{
 			SSTVPayload? sstvPayload = JsonSerializer.Deserialize<SSTVPayload>(jsonPayload);
-			if (sstvPayload is not null)
+			if (sstvPayload is not null && !ignoredModes.Contains(sstvPayload.sstvMode))
 			{
 				//download file from owrx server
 				HttpClient httpClient = new HttpClient();
-				var imageBytes = await httpClient.GetByteArrayAsync($"{_configuration["owrx"]}/files/{sstvPayload.file}");
-
-				double entropy = NoiseDetector.GetEntropy(imageBytes);
-				bool noisy = entropy < 7.05;
-
-				using (var stream = new MemoryStream(imageBytes))
+				try
 				{
-					foreach (var channel in _channels)
-					{
-						if (channel is SocketTextChannel textChannel)
-						{
-							var embed = new EmbedBuilder()
-								.WithImageUrl($"attachment://{sstvPayload.file}")
-								.WithDescription($"**Mode**: {sstvPayload.sstvMode}\n**Frequency**: {sstvPayload.freq / 1000000.0:F3} MHz\n**Dimensions**: {sstvPayload.width}x{sstvPayload.height}\n**Entropy**: {entropy:F4} bits\n**Noisy**: {noisy}")
-								.WithColor(Color.Blue)
-								.WithTimestamp(DateTimeOffset.Now)
-								.Build();
-							await textChannel.SendFileAsync(stream, sstvPayload.file, embed: embed);
-						}
+					var imageBytes = await httpClient.GetByteArrayAsync($"{_configuration["owrx"]}/files/{sstvPayload.file}");
 
+					double entropy = NoiseDetector.GetEntropy(imageBytes);
+					bool noisy = entropy < 7.05;
+
+					if (!noisy)
+					{
+						using (var stream = new MemoryStream(imageBytes))
+						{
+							foreach (var channel in _channels)
+							{
+								if (channel is SocketTextChannel textChannel)
+								{
+									var embed = new EmbedBuilder()
+										.WithImageUrl($"attachment://{sstvPayload.file}")
+										.WithDescription($"**Mode**: {sstvPayload.sstvMode}\n**Frequency**: {sstvPayload.freq / 1000000.0:F3} MHz\n**Dimensions**: {sstvPayload.width}x{sstvPayload.height}\n**Entropy**: {entropy:F4} bits\n**Noisy**: {noisy}")
+										.WithColor(Color.Blue)
+										.WithTimestamp(DateTimeOffset.Now)
+										.Build();
+									await textChannel.SendFileAsync(stream, sstvPayload.file, embed: embed);
+								}
+
+							}
+						}
 					}
+					else
+					{
+						Console.WriteLine($"ignored noisy image with entropy of {entropy:F3} bits..");
+					}
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine("error on image handling:");
+					Console.WriteLine(ex.ToString());
 				}
 			}
 		}
