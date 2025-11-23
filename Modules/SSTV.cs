@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using MQTTnet;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using HamBot.Helper;
 
 namespace HamBot.Modules
 {
@@ -49,6 +50,8 @@ namespace HamBot.Modules
 				HttpClient httpClient = new HttpClient();
 				var imageBytes = await httpClient.GetByteArrayAsync($"{_configuration["owrx"]}/files/{sstvPayload.file}");
 
+				double entropy = NoiseDetector.GetEntropy(imageBytes);
+
 				using (var stream = new MemoryStream(imageBytes))
 				{
 					foreach (var channel in _channels)
@@ -57,7 +60,7 @@ namespace HamBot.Modules
 						{
 							var embed = new EmbedBuilder()
 								.WithImageUrl($"attachment://{sstvPayload.file}")
-								.WithDescription($"**Mode**: {sstvPayload.sstvMode}\n**Frequency**: {sstvPayload.freq / 1000000.0:F3} MHz\n**Dimensions**: {sstvPayload.width}x{sstvPayload.height}")
+								.WithDescription($"**Mode**: {sstvPayload.sstvMode}\n**Frequency**: {sstvPayload.freq / 1000000.0:F3} MHz\n**Dimensions**: {sstvPayload.width}x{sstvPayload.height}\n**Entropy**: {entropy:F4} bits")
 								.WithColor(Color.Blue)
 								.WithTimestamp(DateTimeOffset.Now)
 								.Build();
