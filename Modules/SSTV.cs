@@ -55,7 +55,11 @@ namespace HamBot.Modules
 		private async Task RecievedImage(string jsonPayload)
 		{
 			SSTVPayload? sstvPayload = JsonSerializer.Deserialize<SSTVPayload>(jsonPayload);
-			if (sstvPayload is not null && !ignoredModes.Contains(sstvPayload.sstvMode))
+			if (
+				sstvPayload is not null
+				&& !ignoredModes.Contains(sstvPayload.sstvMode)
+				&& sstvPayload.file != ""
+			)
 			{
 				//download file from owrx server
 				HttpClient httpClient = new HttpClient();
@@ -131,6 +135,10 @@ namespace HamBot.Modules
 
 		public async Task BeginListen()
 		{
+			_channels.Clear();
+			if (_mqttClient is not null)
+				await _mqttClient.DisconnectAsync();
+
 			Console.WriteLine($"getting all channels...");
 			foreach (var guild in _discordClient.Guilds)
 			{
